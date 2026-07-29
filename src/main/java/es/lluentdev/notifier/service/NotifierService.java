@@ -80,16 +80,22 @@ public class NotifierService {
      */
     public void checkAndNotifyNewGames(boolean silent) {
         // 1. GamerPower
-        List<GiveAway> gamerPowerGames = getActiveGames();
-        for (GiveAway game : gamerPowerGames) {
-            String key = "GP_" + game.id();
-            if (!notifiedDealKeys.contains(key)) {
-                if (!silent) {
-                    telegramClient.sendGiveawayNotification(game);
-                    System.out.println("✅ Notificado (GamerPower): " + game.title());
+        try {
+            List<GiveAway> gamerPowerGames = getActiveGames();
+            if (gamerPowerGames != null) {
+                for (GiveAway game : gamerPowerGames) {
+                    String key = "GP_" + game.id();
+                    if (!notifiedDealKeys.contains(key)) {
+                        if (!silent) {
+                            telegramClient.sendGiveawayNotification(game);
+                            System.out.println("✅ Notificado (GamerPower): " + game.title());
+                        }
+                        notifiedDealKeys.add(key);
+                    }
                 }
-                notifiedDealKeys.add(key);
             }
+        } catch (Exception e) {
+            System.err.println("⚠️ Error consultando GamerPower: " + e.getMessage());
         }
 
         // 2. CheapShark
