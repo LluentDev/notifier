@@ -4,6 +4,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import es.lluentdev.notifier.client.CheapSharkClient;
@@ -30,13 +32,13 @@ public class NotifierService {
     private final TelegramClient telegramClient;
     private final FreeToGameClient freeToGameClient;
 
-    // Set para almacenar los identificadores de los juegos ya notificados y evitar
-    // duplicados.
+    // Set para almacenar los identificadores de los juegos ya notificados
     private final Set<String> notifiedDealKeys = new HashSet<>();
 
     public NotifierService(GamerPowerClient gamerPowerClient,
             CheapSharkClient cheapSharkClient,
-            TelegramClient telegramClient, FreeToGameClient freeToGameClient) {
+            TelegramClient telegramClient,
+            FreeToGameClient freeToGameClient) {
         this.gamerPowerClient = gamerPowerClient;
         this.cheapSharkClient = cheapSharkClient;
         this.telegramClient = telegramClient;
@@ -44,10 +46,18 @@ public class NotifierService {
     }
 
     /**
-     * Obtiene la lista de juegos activos de GamerPower filtrando por tipo y estado.
-     * 
-     * @return Lista de juegos activos de GamerPower y estado "Active".
+     * Se ejecuta automáticamente SOLO UNA VEZ al arrancar la aplicación.
+     * Carga todos los juegos actuales en la memoria SIN enviar mensajes a Telegram
+     * para evitar SPAM al reiniciar la app en Render.
      */
+    @EventListener(ApplicationReadyEvent.class)
+    public void initCacheOnStartup() {
+        System.out.println("🚀 Carga inicial silenciosa: memorizando ofertas existentes...");
+        checkAndNotifyNewGames(true); // true = modo silencioso
+        System.out.println(
+                "✅ Memorización completada. Se ignorarán los " + notifiedDealKeys.size() + " juegos actuales.");
+    }
+
     public List<GiveAway> getActiveGames() {
         return gamerPowerClient.fetchPcGiveaways().stream()
                 .filter(g -> "Game".equalsIgnoreCase(g.type()))
@@ -56,19 +66,29 @@ public class NotifierService {
     }
 
     /**
-     * Verifica y notifica nuevos juegos de las APIs integradas (GamerPower,
-     * CheapShark y FreeToGame).
-     * Evita notificar juegos que ya han sido enviados previamente.
+     * Sobrecarga sin parámetros para mantener compatibilidad con el Scheduler.
      */
     public void checkAndNotifyNewGames() {
+        checkAndNotifyNewGames(false);
+    }
+
+    /**
+     * Verifica los juegos activos de las APIs integradas.
+     * 
+     * @param silent Si es true, añade las claves al Set pero NO envía
+     *               notificaciones a Telegram.
+     */
+    public void checkAndNotifyNewGames(boolean silent) {
         // 1. GamerPower
         List<GiveAway> gamerPowerGames = getActiveGames();
         for (GiveAway game : gamerPowerGames) {
             String key = "GP_" + game.id();
             if (!notifiedDealKeys.contains(key)) {
-                telegramClient.sendGiveawayNotification(game);
+                if (!silent) {
+                    telegramClient.sendGiveawayNotification(game);
+                    System.out.println("✅ Notificado (GamerPower): " + game.title());
+                }
                 notifiedDealKeys.add(key);
-                System.out.println("✅ Notificado (GamerPower): " + game.title());
             }
         }
 
@@ -78,29 +98,32 @@ public class NotifierService {
             for (CheapShark deal : cheapSharkDeals) {
                 String key = "CS_" + deal.dealID();
                 if (!notifiedDealKeys.contains(key)) {
-                    telegramClient.sendCheapSharkNotification(deal);
+                    if (!silent) {
+                        telegramClient.sendCheapSharkNotification(deal);
+                        System.out.println("✅ Notificado (CheapShark): " + deal.title());
+                    }
                     notifiedDealKeys.add(key);
-                    System.out.println("✅ Notificado (CheapShark): " + deal.title());
                 }
             }
         } catch (Exception e) {
-            System.err.println("⚠️ Error en el procesamiento de CheapShark:" + e.getMessage());
+            System.err.println("⚠️ Error en el procesamiento de CheapShark: " + e.getMessage());
         }
 
         // 3. FreeToGame
         try {
             List<FreeToGame> ftgGames = freeToGameClient.fetchLatestPcGames().stream()
-                    .limit(10) //
+                    .limit(10)
                     .toList();
 
             for (FreeToGame game : ftgGames) {
                 String key = "FTG_" + game.id();
                 if (!notifiedDealKeys.contains(key)) {
-                    telegramClient.sendFreeToGameNotification(game);
+                    if (!silent) {
+                        telegramClient.sendFreeToGameNotification(game);
+                        System.out.println("✅ Notificado (FreeToGame): " + game.title());
+                        Thread.sleep(1000); // Pausa para no saturar la API de Telegram
+                    }
                     notifiedDealKeys.add(key);
-                    System.out.println("✅ Notificado (FreeToGame): " + game.title());
-
-                    Thread.sleep(1000); // paramos para no saturar la API de Telegram
                 }
             }
         } catch (InterruptedException e) {
