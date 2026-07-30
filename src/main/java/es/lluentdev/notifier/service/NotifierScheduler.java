@@ -13,6 +13,7 @@ public class NotifierScheduler {
     private final NotifierService giveAwayService;
 
     public NotifierScheduler(NotifierService giveAwayService) {
+
         this.giveAwayService = giveAwayService;
     }
 

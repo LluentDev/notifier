@@ -56,6 +56,16 @@ public class NotifierService {
         checkAndNotifyNewGames(true); // true = modo silencioso
         System.out.println(
                 "✅ Memorización completada. Se ignorarán los " + notifiedDealKeys.size() + " juegos actuales.");
+        String welcomeMessage = """
+                🤖 <b>¡Game Notifier activo y listo!</b>
+
+                Servidor iniciado correctamente en la nube.
+                Actualmente monitorizando <b>%d</b> ofertas activas.
+
+                <i>Las nuevas promociones y juegos gratis se publicarán automáticamente aquí.</i>
+                """.formatted(notifiedDealKeys.size());
+
+        telegramClient.sendMessage(welcomeMessage);
     }
 
     public List<GiveAway> getActiveGames() {
